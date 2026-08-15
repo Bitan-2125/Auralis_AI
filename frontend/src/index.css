@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #D8DEE9 transparent;
+}
+
+::selection {
+  background: #5B6BFF33;
+}
+
+:focus-visible {
+  outline: 2px solid #5B6BFF;
+  outline-offset: 2px;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+.stream-cursor {
+  animation: blink 1s step-start infinite;
+}
