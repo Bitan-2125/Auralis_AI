@@ -4,7 +4,6 @@ from datetime import datetime
 from sqlalchemy import (
     Column, String, Boolean, DateTime, ForeignKey, Text, Integer
 )
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -17,7 +16,7 @@ def gen_uuid():
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id = Column(String, primary_key=True, default=gen_uuid)
     email = Column(String, unique=True, index=True, nullable=False)
     full_name = Column(String, nullable=True)
     hashed_password = Column(String, nullable=False)
@@ -30,10 +29,10 @@ class User(Base):
 class Chat(Base):
     __tablename__ = "chats"
 
-    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
-    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    id = Column(String, primary_key=True, default=gen_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
     title = Column(String, default="New chat")
-    default_model = Column(String, default="openai/gpt-oss-120b")
+    default_model = Column(String, default="deepseek-v4-flash")
     use_rag = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -46,8 +45,8 @@ class Chat(Base):
 class Message(Base):
     __tablename__ = "messages"
 
-    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
-    chat_id = Column(UUID(as_uuid=False), ForeignKey("chats.id"), nullable=False)
+    id = Column(String, primary_key=True, default=gen_uuid)
+    chat_id = Column(String, ForeignKey("chats.id"), nullable=False)
     role = Column(String, nullable=False)  # "user" | "assistant" | "system"
     content = Column(Text, nullable=False)
     model = Column(String, nullable=True)
@@ -60,8 +59,8 @@ class Message(Base):
 class Document(Base):
     __tablename__ = "documents"
 
-    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
-    chat_id = Column(UUID(as_uuid=False), ForeignKey("chats.id"), nullable=False)
+    id = Column(String, primary_key=True, default=gen_uuid)
+    chat_id = Column(String, ForeignKey("chats.id"), nullable=False)
     filename = Column(String, nullable=False)
     chunk_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)

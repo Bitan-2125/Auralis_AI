@@ -1,18 +1,18 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 
 # ---------- Auth ----------
 class UserCreate(BaseModel):
-    email: EmailStr
+    email: str
     password: str
     full_name: Optional[str] = None
 
 
 class UserOut(BaseModel):
     id: str
-    email: EmailStr
+    email: str
     full_name: Optional[str] = None
 
     class Config:
@@ -28,7 +28,7 @@ class Token(BaseModel):
 # ---------- Chats ----------
 class ChatCreate(BaseModel):
     title: Optional[str] = "New chat"
-    default_model: Optional[str] = "openai/gpt-oss-120b"
+    default_model: Optional[str] = "deepseek-v4-flash"
 
 
 class ChatUpdate(BaseModel):
@@ -72,6 +72,9 @@ class MessageOut(BaseModel):
 # ---------- Models ----------
 class ModelInfo(BaseModel):
     id: str
+    name: Optional[str] = None
+    provider: Optional[str] = "Groq"
+    description: Optional[str] = None
     owned_by: Optional[str] = None
     context_window: Optional[int] = None
     supports_vision: bool = False

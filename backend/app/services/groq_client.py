@@ -50,7 +50,9 @@ def list_models() -> List[dict]:
                 continue
             models.append({
                 "id": m.id,
-                "owned_by": getattr(m, "owned_by", None),
+                "name": m.id,
+                "provider": "Groq",
+                "owned_by": getattr(m, "owned_by", "groq"),
                 "context_window": getattr(m, "context_window", None),
                 "supports_vision": m.id in VISION_CAPABLE_MODELS,
             })
@@ -60,8 +62,15 @@ def list_models() -> List[dict]:
     except Exception:
         # Offline / no key yet: fall back to a static list so the UI still renders.
         return [
-            {"id": mid, "owned_by": "groq", "context_window": None, "supports_vision": mid in VISION_CAPABLE_MODELS}
-            for mid in RECOMMENDED_CHAT_MODELS
+            {
+                "id": mid,
+                "name": mid,
+                "provider": "Groq",
+                "owned_by": "groq",
+                "context_window": None,
+                "supports_vision": mid in VISION_CAPABLE_MODELS,
+            }
+            for mid in ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b", "moonshotai/kimi-k2"]
         ]
 
 
