@@ -1,4 +1,4 @@
-# Groq Chat — Multi-user AI Chat with History, Model Picker, RAG & Image Gen
+# AURALIS AI — Multi-user AI Chat with History, Model Picker, RAG & Image Gen
 
 A full-stack chat application:
 
