@@ -4,18 +4,18 @@ import { useNavigate } from "react-router-dom";
 const features = [
   {
     icon: "⚡",
-    title: "AgentRouter & Groq",
-    desc: "Seamlessly powered by AgentRouter for frontier models and Groq for blazing millisecond inference.",
+    title: "Groq & NVIDIA NIM",
+    desc: "Stream answers with Groq and NVIDIA NIM, with clear provider selection for every conversation.",
   },
   {
     icon: "🧠",
     title: "Frontier Models",
-    desc: "Switch between DeepSeek V4 Flash, GLM 5.3, GPT 5.6 Sol, Claude Opus 4.8 & 5, and LLaMA.",
+    desc: "Choose from the live Groq catalog and NVIDIA models including GPT OSS, Nemotron, DeepSeek, Kimi and GLM.",
   },
   {
     icon: "🔓",
-    title: "Instant Access",
-    desc: "Sign up in seconds with just your email and password. Your chats and documents are saved to your account.",
+    title: "Personal Memory",
+    desc: "Save your preferences across conversations, with memory you can inspect, turn off or delete.",
   },
   {
     icon: "📄",
@@ -25,7 +25,7 @@ const features = [
   {
     icon: "🎨",
     title: "Image Generation",
-    desc: "Generate high-fidelity AI imagery in real-time alongside your chat stream.",
+    desc: "Create images with NVIDIA FLUX.2 and keep them in your conversation history.",
   },
   {
     icon: "💬",
@@ -45,12 +45,12 @@ export default function Landing() {
           <span className="w-2.5 h-2.5 rounded-full bg-signal animate-pulse"></span>
           <span className="font-mono text-xs tracking-widest text-text font-bold uppercase">Auralis AI</span>
           <span className="text-[10px] font-mono px-2 py-0.5 bg-accent/20 text-accent border border-accent/40 rounded ml-2">
-            AgentRouter Active
+            Multi-provider chat
           </span>
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate("/login")}
+            onClick={() => navigate("/chat")}
             className="text-sm bg-accent hover:bg-accent/90 text-white font-medium px-5 py-2 rounded transition-colors shadow-sm shadow-accent/20"
           >
             Start Chatting →
@@ -65,7 +65,7 @@ export default function Landing() {
 
         <div className="inline-flex items-center gap-2 bg-panel border border-line rounded-full px-4 py-1.5 text-xs text-muted font-mono mb-6">
           <span className="w-1.5 h-1.5 rounded-full bg-signal"></span>
-          AgentRouter & Groq · Multi-Model Intelligence
+          Groq & NVIDIA NIM · Multi-Model Intelligence
         </div>
 
         <h1 className="font-display text-5xl md:text-7xl font-bold text-text leading-tight max-w-4xl mb-6">
@@ -74,15 +74,15 @@ export default function Landing() {
         </h1>
 
         <p className="text-muted text-lg md:text-xl max-w-2xl mb-10 leading-relaxed">
-          Access next-gen reasoning models including <strong className="text-text">DeepSeek V4 Flash</strong>, <strong className="text-text">GLM 5.3</strong>, <strong className="text-text">Claude Opus</strong>, and <strong className="text-text">Groq</strong> in one unified interface.
+          Chat with models from <strong className="text-text">Groq</strong> and <strong className="text-text">NVIDIA NIM</strong>, ask questions about your documents, and create images in one workspace.
         </p>
 
         <div className="flex items-center gap-4">
           <button
-            onClick={() => navigate("/login")}
+            onClick={() => navigate("/chat")}
             className="bg-accent hover:bg-accent/90 text-white font-semibold text-base px-8 py-3 rounded-lg transition-all shadow-lg shadow-accent/25 hover:shadow-accent/45 hover:scale-[1.02]"
           >
-            Use it for free →
+            Open your workspace →
           </button>
         </div>
 
@@ -93,7 +93,7 @@ export default function Landing() {
               <span className="w-3 h-3 rounded-full bg-red-400/70"></span>
               <span className="w-3 h-3 rounded-full bg-yellow-400/70"></span>
               <span className="w-3 h-3 rounded-full bg-green-400/70"></span>
-              <span className="ml-3 text-xs text-muted font-mono">agentrouter · deepseek-v4-flash</span>
+              <span className="ml-3 text-xs text-muted font-mono">nvidia · gpt-oss-20b</span>
             </div>
             <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/60">
               Live Streaming
@@ -138,12 +138,12 @@ export default function Landing() {
         <div className="max-w-xl mx-auto bg-panel border border-line rounded-2xl p-10 shadow-xl relative overflow-hidden">
           <div className="absolute inset-0 bg-accent/5 pointer-events-none" />
           <h2 className="font-display text-3xl font-bold mb-3">Ready to chat?</h2>
-          <p className="text-muted mb-8">Sign in or create a free account to get started.</p>
+          <p className="text-muted mb-8">Sign in to keep your conversations, documents and memories together.</p>
           <button
-            onClick={() => navigate("/login")}
+            onClick={() => navigate("/chat")}
             className="bg-accent hover:bg-accent/90 text-white font-semibold px-10 py-3 rounded-lg transition-all shadow-lg shadow-accent/20 text-base"
           >
-            Use it for free →
+            Start Chatting →
           </button>
         </div>
       </section>
@@ -154,7 +154,7 @@ export default function Landing() {
           <span className="w-1.5 h-1.5 rounded-full bg-signal"></span>
           <span className="font-mono tracking-widest uppercase">Auralis AI</span>
         </div>
-        <span>Powered by AgentRouter & Groq</span>
+        <span>Powered by Groq & NVIDIA NIM</span>
       </footer>
     </div>
   );

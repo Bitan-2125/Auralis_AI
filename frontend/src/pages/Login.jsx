@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
+import { describeError } from "../api/errors";
 
 export default function Login() {
   const { login } = useAuth();
@@ -18,7 +19,7 @@ export default function Login() {
       await login(email, password);
       navigate("/chat");
     } catch (err) {
-      setError(err?.response?.data?.detail || "Couldn't sign in. Check your details.");
+      setError(describeError(err));
     } finally {
       setLoading(false);
     }

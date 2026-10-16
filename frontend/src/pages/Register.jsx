@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
+import { describeError } from "../api/errors";
 
 export default function Register() {
   const { register } = useAuth();
@@ -19,7 +20,7 @@ export default function Register() {
       await register(email, password, fullName);
       navigate("/chat");
     } catch (err) {
-      setError(err?.response?.data?.detail || "Couldn't create the account.");
+      setError(describeError(err));
     } finally {
       setLoading(false);
     }
@@ -45,7 +46,7 @@ export default function Register() {
           <div>
             <label className="block text-xs text-muted mb-1 font-mono">Full name</label>
             <input
-              value={fullName} onChange={(e) => setFullName(e.target.value)}
+              maxLength={100} autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)}
               className="w-full bg-panel2 border border-line rounded-sm px-3 py-2 text-sm focus:border-accent outline-none"
               placeholder="Ada Lovelace"
             />
@@ -61,7 +62,7 @@ export default function Register() {
           <div>
             <label className="block text-xs text-muted mb-1 font-mono">Password</label>
             <input
-              type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)}
+              type="password" required minLength={8} maxLength={72} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)}
               className="w-full bg-panel2 border border-line rounded-sm px-3 py-2 text-sm focus:border-accent outline-none"
               placeholder="At least 8 characters"
             />

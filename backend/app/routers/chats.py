@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user
 from app import models, schemas
-from app.services import rag_service
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 
@@ -35,7 +34,8 @@ def create_chat(
 
 
 def _get_owned_chat(chat_id: str, db: Session, user: models.User) -> models.Chat:
-    chat = db.query(models.Chat).filter(models.Chat.id == chat_id, models.Chat.user_id == user.id).first()
+    owner_id = user if isinstance(user, str) else user.id
+    chat = db.query(models.Chat).filter(models.Chat.id == chat_id, models.Chat.user_id == owner_id).first()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
     return chat
@@ -54,7 +54,7 @@ def update_chat(
     user: models.User = Depends(get_current_user),
 ):
     chat = _get_owned_chat(chat_id, db, user)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    for field, value in payload.model_dump(exclude_unset=True, exclude_none=True).items():
         setattr(chat, field, value)
     db.commit()
     db.refresh(chat)
@@ -66,7 +66,6 @@ def delete_chat(chat_id: str, db: Session = Depends(get_db), user: models.User =
     chat = _get_owned_chat(chat_id, db, user)
     db.delete(chat)
     db.commit()
-    rag_service.delete_collection(chat_id)
     return {"ok": True}
 
 

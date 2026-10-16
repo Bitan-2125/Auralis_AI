@@ -1,42 +1,45 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { api } from "../api/client";
 
-export default function MessageBubble({ role, content, imageUrl, streaming }) {
+function Attachment({ url }) {
+  const [src, setSrc] = useState(null);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    let live = true, objectUrl;
+    setSrc(null); setError(false);
+    if (url.startsWith("/images/")) {
+      api.get(url, { responseType: "blob" }).then(r => {
+        if (live) { objectUrl = URL.createObjectURL(r.data); setSrc(objectUrl); }
+      }).catch(() => { if (live) setError(true); });
+    } else setSrc(url);
+    return () => { live = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [url]);
+  if (error) return <p className="text-xs text-red-600 mb-3">Image could not be loaded.</p>;
+  if (!src) return <p className="text-xs text-muted mb-3">Loading image...</p>;
+  return <a href={src} target="_blank" rel="noreferrer"><img src={src} alt="Conversation image" className="rounded-2xl mb-4 max-h-[480px] max-w-full object-contain" /></a>;
+}
+
+export default function MessageBubble({ role, content, imageUrl, streaming, sources = [], onRemember }) {
   const isUser = role === "user";
-  return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-4`}>
-      <div
-        className={`max-w-[75%] rounded-md px-4 py-3 text-sm leading-relaxed ${
-          isUser
-            ? "bg-accent text-white rounded-br-sm"
-            : "bg-panel border border-line text-text rounded-bl-sm shadow-sm"
-        }`}
-      >
-        {imageUrl && (
-          <img src={imageUrl} alt="attachment" className="rounded-sm mb-2 max-h-64 object-cover" />
-        )}
-        <div className={`prose prose-sm max-w-none
-          prose-p:my-1 prose-p:leading-relaxed
-          prose-headings:font-semibold prose-headings:text-text prose-headings:mt-3 prose-headings:mb-1
-          prose-h1:text-lg prose-h2:text-base prose-h3:text-sm
-          prose-strong:text-text prose-strong:font-semibold
-          prose-em:text-muted
-          prose-code:bg-panel2 prose-code:text-accent prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono prose-code:before:content-none prose-code:after:content-none
-          prose-pre:bg-panel2 prose-pre:border prose-pre:border-line prose-pre:rounded-md prose-pre:p-3 prose-pre:overflow-x-auto
-          prose-pre:text-text prose-pre:text-xs
-          prose-ul:my-1 prose-ul:pl-4 prose-li:my-0.5
-          prose-ol:my-1 prose-ol:pl-4
-          prose-blockquote:border-l-4 prose-blockquote:border-accent prose-blockquote:pl-3 prose-blockquote:text-muted prose-blockquote:italic prose-blockquote:my-2
-          prose-a:text-accent prose-a:underline
-          prose-hr:border-line
-          prose-table:text-xs prose-thead:bg-panel2 prose-th:px-3 prose-th:py-1.5 prose-td:px-3 prose-td:py-1.5 prose-table:border prose-table:border-line
-          ${isUser ? "prose-invert prose-p:text-white prose-strong:text-white prose-headings:text-white prose-code:bg-white/20 prose-code:text-white" : ""}
-        `}>
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{content || " "}</ReactMarkdown>
-        </div>
-        {streaming && <span className="stream-cursor text-muted">▍</span>}
+  const [copied, setCopied] = useState(false);
+  const webCount = sources.filter(source => source.kind === "web").length;
+  return <article className={`mb-8 flex ${isUser ? "justify-end" : "gap-3 sm:gap-4"}`}>
+    {!isUser && <span className="brand-mark small mt-1 shrink-0" aria-hidden="true">a</span>}
+    <div className={isUser ? "max-w-[88%] rounded-3xl rounded-tr-md bg-[#f0f0f4] px-5 py-3" : "min-w-0 flex-1 pt-1"}>
+      {imageUrl && <Attachment url={imageUrl} />}
+      <div className={`prose prose-sm max-w-none break-words prose-p:leading-7 prose-p:my-2 prose-headings:text-text prose-strong:text-text prose-a:text-accent prose-pre:bg-[#f5f5f8] prose-pre:text-text prose-pre:border prose-pre:border-line prose-pre:rounded-xl prose-code:before:content-none prose-code:after:content-none prose-code:text-accent prose-table:text-xs ${isUser ? "whitespace-pre-wrap" : ""}`}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{content || " "}</ReactMarkdown>
+        {streaming && <span className="stream-cursor text-accent">▋</span>}
       </div>
+      {sources.length > 0 && <details className="mt-4 rounded-xl border border-line p-3 text-xs"><summary className="cursor-pointer font-medium text-muted">{sources.length} {webCount === sources.length ? "web" : webCount ? "web & document" : "document"} source{sources.length > 1 ? "s" : ""}</summary><div className="mt-3 space-y-3">{sources.map(s => <div key={`${s.kind || "document"}-${s.number}`}>
+        {s.kind === "web" ? <><a href={s.url} target="_blank" rel="noopener noreferrer" className="font-medium text-accent hover:underline">[{s.number}] {s.title || s.url} ↗</a><p className="text-[10px] text-muted mt-1 break-all">{s.url}{s.published_date ? ` · ${s.published_date}` : ""}</p></> : <p className="font-medium">[{s.number}] {s.filename} · passage {s.chunk_index + 1}</p>}
+        <p className="text-muted mt-1 leading-relaxed">{s.excerpt}...</p></div>)}</div></details>}
+      {!streaming && <div className="flex gap-3 mt-2 text-[11px] text-muted">
+        <button onClick={async () => { try { await navigator.clipboard.writeText(content); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { setCopied(false); } }}>{copied ? "Copied" : "Copy"}</button>
+        {isUser && onRemember && content.length <= 1000 && <button onClick={() => onRemember(content)}>Save to memory</button>}
+      </div>}
     </div>
-  );
+  </article>;
 }

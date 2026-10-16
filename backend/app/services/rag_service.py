@@ -1,137 +1,113 @@
-"""
-RAG pipeline: chunk documents, embed with a local sentence-transformers model,
-store/query in ChromaDB. One Chroma collection per chat, named "chat_<chat_id>".
+"""Persistent basic RAG: document parsing, overlapping chunks and BM25 retrieval.
+
+Runs locally using the application's database. No external vector service or
+embedding download is required. Every query is restricted to one owned chat.
 """
 import io
-import logging
-from typing import List
-
+import math
+import re
+import zipfile
+from collections import Counter
+from pathlib import Path
+from fastapi import HTTPException
+from app import models
 from app.config import settings
 
-logger = logging.getLogger(__name__)
-
-_chroma_client = None
-_embedding_fn = None
-
-
-def get_chroma_client():
-    global _chroma_client
-    if _chroma_client is None:
-        try:
-            import chromadb
-            # If local in-memory or http client
-            if settings.chroma_host and settings.chroma_host != "chroma":
-                _chroma_client = chromadb.HttpClient(host=settings.chroma_host, port=settings.chroma_port)
-            else:
-                _chroma_client = chromadb.Client()
-        except Exception as e:
-            logger.warning(f"ChromaDB initialization fallback: {e}")
-            import chromadb
-            _chroma_client = chromadb.Client()
-    return _chroma_client
+MAX_FILE_BYTES = settings.upload_max_mb * 1024 * 1024
+MAX_TEXT_CHARS = 1000000
+SUPPORTED = {".txt", ".md", ".csv", ".pdf", ".docx"}
+STOPWORDS = set("a an the is are was were be to of and or in on for with this that it my me what how can please tell about from do does have document documents uploaded file files".split())
 
 
-def get_embedding_fn():
-    global _embedding_fn
-    if _embedding_fn is None:
-        try:
-            from chromadb.utils import embedding_functions
-            _embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-                model_name=settings.embedding_model
-            )
-        except Exception as e:
-            logger.warning(f"Could not load sentence transformer: {e}")
-            _embedding_fn = None
-    return _embedding_fn
-
-
-def _collection_name(chat_id: str) -> str:
-    return f"chat_{chat_id}".replace("-", "_")
-
-
-def get_or_create_collection(chat_id: str):
-    client = get_chroma_client()
-    fn = get_embedding_fn()
-    kwargs = {"name": _collection_name(chat_id)}
-    if fn:
-        kwargs["embedding_function"] = fn
-    return client.get_or_create_collection(**kwargs)
-
-
-def extract_text(filename: str, raw: bytes) -> str:
-    lower = filename.lower()
-    if lower.endswith(".pdf"):
-        # Try PyMuPDF (fitz) first, then pypdf
-        try:
-            import fitz
-            doc = fitz.open(stream=raw, filetype="pdf")
-            return "\n".join(page.get_text() for page in doc)
-        except Exception:
-            pass
-        try:
+def extract_text(filename, raw):
+    suffix = Path(filename).suffix.lower()
+    if suffix not in SUPPORTED:
+        raise HTTPException(415, "Use PDF, DOCX, TXT, Markdown or CSV files")
+    try:
+        if suffix == ".pdf":
             from pypdf import PdfReader
             reader = PdfReader(io.BytesIO(raw))
-            return "\n".join(page.extract_text() or "" for page in reader.pages)
-        except Exception:
-            pass
-    if lower.endswith(".docx"):
-        try:
-            import docx
-            d = docx.Document(io.BytesIO(raw))
-            return "\n".join(p.text for p in d.paragraphs)
-        except Exception:
-            pass
-    # Fallback: treat as plain text (.txt, .md, .csv, etc.)
-    return raw.decode("utf-8", errors="ignore")
+            if reader.is_encrypted:
+                raise ValueError("Encrypted PDF")
+            if len(reader.pages) > 500:
+                raise HTTPException(413, "PDF exceeds the 500-page limit")
+            parts, total = [], 0
+            for page in reader.pages:
+                text = page.extract_text() or ""
+                total += len(text)
+                if total > MAX_TEXT_CHARS:
+                    raise HTTPException(413, "Extracted document is too large")
+                parts.append(text)
+            return "\n".join(parts)
+        if suffix == ".docx":
+            with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+                if sum(info.file_size for info in archive.infolist()) > 30 * 1024 * 1024:
+                    raise HTTPException(413, "Expanded DOCX is too large")
+            from docx import Document
+            doc = Document(io.BytesIO(raw))
+            return "\n".join([p.text for p in doc.paragraphs] + [" | ".join(c.text for c in row.cells) for table in doc.tables for row in table.rows])
+        return raw.decode("utf-8-sig")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(400, "Could not read this file. Use a valid, unencrypted document or UTF-8 text. Scanned PDFs need OCR first.") from None
 
 
-def chunk_text(text: str, chunk_size: int = 800, overlap: int = 120) -> List[str]:
-    words = text.split()
-    if not words:
-        return []
+def chunk_text(text, chunk_size=1200, overlap=200):
+    if len(text) > MAX_TEXT_CHARS:
+        raise HTTPException(413, "Extracted document is too large")
+    text = re.sub(r"\s+", " ", text).strip()
     chunks = []
-    step = max(chunk_size - overlap, 1)
-    for i in range(0, len(words), step):
-        chunk = " ".join(words[i:i + chunk_size])
-        if chunk.strip():
-            chunks.append(chunk)
-        if i + chunk_size >= len(words):
+    start = 0
+    while start < len(text):
+        end = min(start + chunk_size, len(text))
+        if end < len(text):
+            boundary = text.rfind(" ", start + chunk_size // 2, end)
+            if boundary > start:
+                end = boundary
+        chunks.append(text[start:end])
+        if end == len(text):
             break
+        start = max(start + 1, end - overlap)
     return chunks
 
 
-def add_document(chat_id: str, filename: str, raw_bytes: bytes) -> int:
-    text = extract_text(filename, raw_bytes)
-    chunks = chunk_text(text)
-    if not chunks:
-        return 0
-    try:
-        collection = get_or_create_collection(chat_id)
-        ids = [f"{filename}-{i}" for i in range(len(chunks))]
-        metadatas = [{"filename": filename, "chunk_index": i} for i in range(len(chunks))]
-        collection.add(documents=chunks, ids=ids, metadatas=metadatas)
-        return len(chunks)
-    except Exception as e:
-        logger.error(f"Error adding document to RAG collection: {e}")
-        return 0
+def tokens(text):
+    return [w for w in re.findall(r"\w+", text.casefold()) if w not in STOPWORDS and len(w) > 1]
 
 
-def query(chat_id: str, question: str, n_results: int = 4) -> str:
-    try:
-        collection = get_or_create_collection(chat_id)
-        if collection.count() == 0:
-            return ""
-        results = collection.query(query_texts=[question], n_results=min(n_results, collection.count()))
-        docs = results.get("documents", [[]])[0]
-        return "\n\n---\n\n".join(docs)
-    except Exception as e:
-        logger.error(f"Error querying RAG collection: {e}")
-        return ""
-
-
-def delete_collection(chat_id: str):
-    try:
-        client = get_chroma_client()
-        client.delete_collection(_collection_name(chat_id))
-    except Exception:
-        pass
+def query(db, chat_id, question, n_results=4):
+    rows = db.query(models.DocumentChunk, models.Document).join(models.Document).filter(models.Document.chat_id == chat_id).all()
+    terms = set(tokens(question))
+    if not rows:
+        return []
+    counts = [Counter(tokens(chunk.content + " " + doc.filename)) for chunk, doc in rows]
+    lengths = [sum(c.values()) for c in counts]
+    avg_length = max(1, sum(lengths) / len(rows))
+    doc_freq = {term: sum(term in c for c in counts) for term in terms}
+    ranked = []
+    for idx, count in enumerate(counts):
+        score = 0
+        for term in terms:
+            freq = count[term]
+            if freq:
+                idf = math.log(1 + (len(rows) - doc_freq[term] + 0.5) / (doc_freq[term] + 0.5))
+                score += idf * (freq * 2.5) / (freq + 1.5 * (0.25 + 0.75 * lengths[idx] / avg_length))
+        if score > 0:
+            ranked.append((score, idx))
+    ranked.sort(reverse=True)
+    # Broad requests such as "summarize this document" have no lexical overlap.
+    # Use opening passages across the attached files for these explicit requests.
+    if not ranked and re.search(r"\b(summarize|summary|overview|summarise)\b", question, re.I):
+        seen_documents = set()
+        for idx, (chunk, document) in sorted(enumerate(rows), key=lambda item: item[1][0].chunk_index):
+            if document.id not in seen_documents:
+                ranked.append((0, idx))
+                seen_documents.add(document.id)
+    sources = []
+    for _, idx in ranked[:n_results]:
+        chunk, doc = rows[idx]
+        sources.append({"number": len(sources) + 1, "document_id": doc.id,
+                        "filename": doc.filename, "chunk_index": chunk.chunk_index,
+                        "text": chunk.content, "excerpt": chunk.content[:240]})
+    return sources

@@ -1,68 +1,77 @@
-# Groq Chat — Multi-user AI Chat with History, Model Picker, RAG & Image Gen
+# Auralis - Groq + NVIDIA NIM chat
 
-A full-stack chat application:
+A React/FastAPI chat app with streaming replies, persistent conversation history, user-controlled memory, document retrieval and image generation. Your existing accounts and conversations are preserved; startup only creates the new tables.
 
-- **Backend:** FastAPI (Python) + PostgreSQL (users, chats, messages) + ChromaDB (RAG vectors)
-- **Frontend:** React (Vite) + Tailwind CSS
-- **LLMs:** Groq (live model list, user picks per-chat or per-message) + free image generation (Pollinations.ai, no key needed)
-- **Auth:** Email/password with JWT, multi-user, each user only sees their own chats
-- **RAG:** Upload PDF/DOCX/TXT/MD/CSV per chat → chunked, embedded locally (sentence-transformers), stored in Chroma, retrieved automatically when RAG is on
+## Run locally on Windows
 
-## 1. Get a free Groq API key
+In a backend terminal:
 
-Sign up at https://console.groq.com/keys — Groq's free developer tier covers everything here.
-
-## 2. Configure environment
-
-```bash
-cp backend/.env.example backend/.env
-# then edit backend/.env and paste your GROQ_API_KEY, and set a real SECRET_KEY
-```
-
-## 3. Run everything with Docker
-
-```bash
-docker compose up --build
-```
-
-This starts:
-- Postgres on `localhost:5432`
-- ChromaDB on `localhost:8001`
-- FastAPI backend on `localhost:8000` (docs at `/docs`)
-- React frontend on `localhost:5173`
-
-Open **http://localhost:5173**, register an account, and start chatting.
-
-## 4. Running without Docker (local dev)
-
-**Backend**
-```bash
+```powershell
 cd backend
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-# run local Postgres + Chroma separately, or point DATABASE_URL/CHROMA_HOST at hosted instances
-uvicorn app.main:app --reload
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env  # only on first setup; do not overwrite an existing .env
+# Edit .env: set GROQ_API_KEY, NVIDIA_API_KEY, and a random SECRET_KEY.
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 ```
 
-**Frontend**
-```bash
+In a frontend terminal:
+
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
-## How the pieces fit together
+Open http://localhost:5173 and register or sign in. API documentation is at http://localhost:8000/docs. SQLite is the default; run the backend from the backend directory to use the existing `chat.db`.
 
-- **Model picker** (`GET /models/chat`) calls Groq's live `/models` endpoint on every request, so the dropdown always reflects whatever Groq currently hosts — no hardcoded, stale model list to maintain. A small curated map in `backend/app/config.py` (`VISION_CAPABLE_MODELS`) flags which of those models accept image input, since Groq's API doesn't expose that itself; update that set when Groq ships/retires vision models.
-- **Chat streaming** — `POST /chats/{id}/messages` streams the assistant's reply token-by-token over Server-Sent Events, and only writes the full assistant message to Postgres once the stream completes.
-- **RAG** — each chat gets its own Chroma collection (`chat_<id>`). Uploaded documents are chunked (~800 words, 120-word overlap), embedded locally with `all-MiniLM-L6-v2` (no external embedding API needed), and the top-k chunks are injected as system context on each turn when "Use RAG" is checked.
-- **Image generation** — the "Generate image" tab calls Pollinations.ai (free, keyless) with the chosen style (`flux`/`turbo`). To add a paid provider (e.g. Stability AI) later, extend `backend/app/services/image_service.py`.
-- **Vision Q&A** — pick a model flagged `supports_vision` and attach an image URL with your message; it's passed straight through as multimodal content to Groq.
+For Docker, configure `backend/.env`, then run `docker compose up --build`. This starts the backend on port 8000 and the frontend on port 5173. The backend directory is mounted so the SQLite database survives container recreation. No Chroma, PyTorch, model download, or embedding API is required. Do not run the local backend and Docker backend against the same SQLite database simultaneously.
 
-## Known simplifications (worth hardening for a real production deploy)
+## Features
 
-- Deleting a single uploaded document doesn't currently remove just its vectors from the shared per-chat Chroma collection (deleting the whole chat does clean up the collection). For per-document deletion, track chunk IDs per document and call `collection.delete(ids=...)`.
-- No refresh-token rotation — JWTs are long-lived (7 days) for simplicity; add refresh tokens for a stricter session model.
-- No rate limiting / per-user quotas on Groq calls — add `slowapi` or a gateway if exposing this publicly.
-- Alembic migrations aren't set up; tables are created via `Base.metadata.create_all` on startup. Add Alembic before you need real schema migrations.
-- No file storage for uploaded documents themselves (only their extracted text goes into Chroma) — add S3/blob storage if you need the originals kept.
+- **Chat:** Groq and NVIDIA NIM are separate provider groups. Internal IDs such as `groq::openai/gpt-oss-20b` and `nvidia::openai/gpt-oss-20b` prevent routing collisions. Credentials stay on the server. Optional AgentRouter support uses explicit model IDs from configuration.
+- **History:** Text and image conversations are stored in SQL. Search, rename and delete chats in the sidebar. Completed responses are saved before the browser receives its completion event. Errors and interrupted replies are never presented as saved answers. Failed text requests leave the user's message in history; interrupted assistant text is discarded.
+- **Context:** Each turn includes complete recent conversation pairs within a configurable 24,000-character input budget. Old messages remain in history but eventually fall outside the model context. This is bounded recent context, not unlimited recall or an automatic summary of every previous message.
+- **Memory:** Open Memory to add, inspect or delete facts and preferences. You can also send `Remember: I prefer concise Python examples`, or select Save to memory under one of your messages. Relevant saved memories are included across your conversations. Turning memory off excludes saved memories from subsequent requests; deletion removes them from future requests. Existing messages and already-started requests are unaffected.
+- **Automatic web search:** Configure `TAVILY_API_KEY` in `backend/.env`. With **Web: Auto** enabled, GPT OSS 20B on the active provider selects the `tavily_search` function when current information, explicit lookups or source verification would help. It sees the latest request and six short recent messages for follow-ups; saved memory, uploaded passages and image bytes are not sent to the routing step. Your selected chat model writes the final streaming answer using the search results alongside enabled memory and document context. Web links, dates and excerpts are saved with the reply. **Web: Off** skips both the routing call and Tavily. Memory-saving commands and image generation also skip search. The model is instructed to respect requests not to browse; use Web: Off to enforce that directly.
+- **Basic RAG:** Open Documents to upload PDF, DOCX, TXT, Markdown or CSV files (4 MB each, up to 20 per chat). Text is parsed, split into overlapping passages and persisted in SQL. Local BM25 ranks passages by keyword relevance and injects up to four, with numbered citations and expandable source excerpts. This is lexical retrieval, so paraphrases without shared terms can miss results. Summary requests use opening passages and are not exhaustive summaries of long documents. Scanned PDFs require OCR first. Old document metadata from the former Chroma implementation needs re-uploading because the original text was not saved in SQL.
+- **Images:** Select Create image. NVIDIA NIM runs FLUX.2 Klein 4B at 1024 x 1024. Generated bytes and the conversation are saved in SQL; private image URLs require the owning user's token. The live endpoint currently accepts `cfg_scale=1` and no `mode` field, which differs from its published example. Groq provides image understanding, not a documented text-to-image API. Select a vision-capable Groq model to attach PNG, JPEG or WebP input images.
+
+Model catalogs are cached for five minutes. Groq's live catalog is filtered for non-chat models; NVIDIA's documented/verified chat allowlist is intersected with its live catalog to avoid presenting embedding and safety models as chat models. Fallback entries are shown if catalog discovery fails. `available` means a server key is configured, not that a specific account has credits or entitlement. Unavailable models, provider quotas, timeouts and authentication failures are surfaced in the interface.
+
+## Tests
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+```powershell
+cd frontend
+npm test
+npm run build
+```
+
+Tests use an isolated temporary database and mocked upstream responses. They cover account isolation, memory, RAG injection/deletion, citation persistence, images, context limits, provider routing, validation and fragmented/interrupted SSE streams.
+
+Automatic-search tests additionally cover tool selection, no-search replies, the Off switch, follow-up context, tool argument validation, request limits, failed searches, URL filtering and web-source persistence. The tool accepts at most two distinct searches per turn, with up to four results each. Results share the existing input context budget. Search uses Tavily's basic depth, so each executed search consumes the corresponding Tavily credits; Auto also makes a small routing-model call on each normal chat turn. Set `WEB_SEARCH_ROUTER_MODEL` to an explicit provider-qualified model to override the default routing model. It must support OpenAI-compatible function calling. If planning or search fails, the app displays a warning and tells the answer model that current information has not been verified.
+
+## Configuration and deployment notes
+
+- Keep `.env` and database files private. They are excluded from new Git additions and Docker images. If a database was already tracked, stop tracking it before publishing the repository; ignore rules do not remove existing Git history.
+- Each account has private chats, memory, documents and images. Missing or expired tokens return 401. The former shared anonymous guest fallback has been removed to prevent mixing users' history.
+- Database-backed generation leases prevent overlapping responses to a chat across workers and serverless instances. Expired leases recover after interrupted processes. Add per-user quotas before opening API-funded generation to unrestricted registrations.
+- New tables are created automatically. Existing table schemas are unchanged. Introduce migrations before making future column changes. Back up the SQLite database before deployment.
+- The default local database is SQLite. PostgreSQL uses the bundled psycopg driver. On Vercel, PostgreSQL and a random SECRET_KEY of at least 32 characters are required; ephemeral SQLite is rejected.
+
+Provider references: [Groq models](https://console.groq.com/docs/models), [Groq vision](https://console.groq.com/docs/vision), [NVIDIA chat APIs](https://docs.api.nvidia.com/nim/reference/llm-apis), [NVIDIA FLUX.2 API](https://docs.api.nvidia.com/nim/reference/black-forest-labs-flux_2-klein-4b-infer), [Tavily Search](https://docs.tavily.com/documentation/api-reference/endpoint/search).
+
+## Vercel deployment
+
+Import this repository with the FastAPI preset and repository root directory. The root `vercel.json` builds the React app, copies it to `public` for CDN delivery, and runs `index.py` for `/api`. Browser requests use the same-origin `/api` URL in production.
+
+Create a Neon Free PostgreSQL resource in Vercel Storage and connect it to the project. Set server environment variables `DATABASE_URL` (the pooled PostgreSQL connection string), `SECRET_KEY` (random, at least 32 characters), `GROQ_API_KEY`, `NVIDIA_API_KEY` and `TAVILY_API_KEY`. Never prefix these with `VITE_`. Redeploy after changing environment variables. No local conversations or credentials are bundled. Tables are created on startup; PostgreSQL stores chats, memories, document passages and private images across deployments.
+
+Requests are limited to four-minute generation timeouts and 4 MB document uploads to fit serverless limits. Long conversations use bounded recent context. The initial free database is suitable for evaluation; image storage and provider credits consume their respective quotas.
+
+For an opt-in live integration test with real provider calls, run `backend/.venv/Scripts/python.exe scripts/live_e2e.py` from the repository root. To test a deployment, add `--base-url https://YOUR-PROJECT.vercel.app`. The suite creates synthetic accounts and removes its generated chats and memories. Reports are saved under ignored `.local/`. Remote test accounts remain for auditability.

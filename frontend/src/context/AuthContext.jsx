@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { api } from "../api/client";
 
 const AuthContext = createContext(null);
@@ -6,7 +6,8 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     const raw = localStorage.getItem("user");
-    return raw ? JSON.parse(raw) : null;
+    try { return raw ? JSON.parse(raw) : null; }
+    catch { return null; }
   });
   const [token, setToken] = useState(() => localStorage.getItem("token"));
 
@@ -39,6 +40,11 @@ export function AuthProvider({ children }) {
     setToken(null);
     setUser(null);
   }, []);
+
+  useEffect(() => {
+    window.addEventListener("auralis:session-expired", logout);
+    return () => window.removeEventListener("auralis:session-expired", logout);
+  }, [logout]);
 
   return (
     <AuthContext.Provider value={{ user, token, login, register, logout }}>

@@ -5,3 +5,14 @@ backend/venv/
 frontend/node_modules/
 frontend/dist/
 .DS_Store
+**/.venv/
+**/.env
+!**/.env.example
+**/*.db
+**/*.db-journal
+**/*.db-wal
+**/*.db-shm
+**/__pycache__/
+.local/
+.vercel/
+public/

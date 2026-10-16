@@ -1,117 +1,63 @@
-"""
-Central application settings, loaded from environment variables (.env).
-"""
+"""Server-only configuration. Provider credentials never go to the browser."""
+from pathlib import Path
+import os
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
 
 
 class Settings(BaseSettings):
-    # --- Database ---
     database_url: str = "sqlite:///./chat.db"
-
-    # --- Auth ---
     secret_key: str = "change-me-in-production-please"
     algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
-
-    # --- AgentRouter ---
-    agentrouter_api_key: str = "sk-rq1JDsRevKZ67CM6qFtzoh5r5dTSsRJ2LziNVH9VNtqwwNZc"
-    agentrouter_base_url: str = "https://agentrouter.org/v1"
-
-    # --- Groq ---
+    access_token_expire_minutes: int = 60 * 24 * 7
     groq_api_key: str = ""
     groq_api_base: str = "https://api.groq.com/openai/v1"
-
-    # --- Chroma (RAG vector store) ---
-    chroma_host: str = "chroma"
-    chroma_port: int = 8000
-
-    # --- Embeddings ---
-    embedding_model: str = "all-MiniLM-L6-v2"
-
-    # --- CORS ---
+    nvidia_api_key: str = ""
+    nvidia_api_base: str = "https://integrate.api.nvidia.com/v1"
+    nvidia_image_url: str = "https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux.2-klein-4b"
+    agentrouter_api_key: str = ""
+    agentrouter_base_url: str = "https://agentrouter.org/v1"
+    agentrouter_models: str = ""
+    tavily_api_key: str = ""
+    web_search_router_model: str = ""
     frontend_origin: str = "http://localhost:5173"
+    context_char_budget: int = Field(default=24000, ge=20000, le=100000)
+    max_completion_tokens: int = Field(default=2048, ge=128, le=8192)
+    upload_max_mb: int = Field(default=4, ge=1, le=4)
+    generation_timeout_seconds: int = Field(default=260, ge=30, le=270)
+    model_config = SettingsConfigDict(env_file=BACKEND_DIR / ".env", extra="ignore")
 
-    # --- Free image generation (no API key required) ---
-    image_gen_base_url: str = "https://image.pollinations.ai/prompt"
-
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    @model_validator(mode="after")
+    def production_storage(self):
+        if os.getenv("VERCEL") == "1":
+            if not self.database_url.startswith(("postgres://", "postgresql://", "postgresql+psycopg://")):
+                raise ValueError("Vercel requires a persistent PostgreSQL DATABASE_URL")
+            if len(self.secret_key) < 32 or "change-me" in self.secret_key:
+                raise ValueError("Set a random SECRET_KEY of at least 32 characters")
+        return self
 
 
 settings = Settings()
-
-# AgentRouter Models
-AGENTROUTER_MODELS = [
-    {
-        "id": "deepseek-v4-flash",
-        "name": "DeepSeek V4 Flash",
-        "provider": "AgentRouter",
-        "description": "Ultra-fast reasoning model with live token streaming",
-        "context_window": 128000,
-        "supports_vision": False,
-    },
-    {
-        "id": "glm-5.3",
-        "name": "GLM 5.3",
-        "provider": "AgentRouter",
-        "description": "High-capability general reasoning model",
-        "context_window": 128000,
-        "supports_vision": False,
-    },
-    {
-        "id": "gpt-5.6-sol",
-        "name": "GPT 5.6 Sol",
-        "provider": "AgentRouter",
-        "description": "Next-generation OpenAI Sol architecture",
-        "context_window": 128000,
-        "supports_vision": False,
-    },
-    {
-        "id": "claude-opus-4-8",
-        "name": "Claude Opus 4.8",
-        "provider": "AgentRouter",
-        "description": "Flagship Claude Opus 4.8 reasoning model",
-        "context_window": 200000,
-        "supports_vision": False,
-    },
-    {
-        "id": "claude-opus-5",
-        "name": "Claude Opus 5",
-        "provider": "AgentRouter",
-        "description": "Next-generation Claude Opus 5 model",
-        "context_window": 200000,
-        "supports_vision": False,
-    },
-]
-
-AGENTROUTER_MODEL_IDS = {m["id"] for m in AGENTROUTER_MODELS}
-
-# Curated capability metadata for Groq models. Groq's /models endpoint tells us
-# which models exist right now, but not which ones accept image input or are
-# meant for chat vs. audio/moderation - we maintain that mapping here and it's
-# the only place you need to touch when Groq ships/retires a model.
 VISION_CAPABLE_MODELS = {
-    "qwen/qwen3.6-27b",
+    "qwen/qwen3.8-27b", "qwen/qwen3.6-27b",
     "meta-llama/llama-4-scout-17b-16e-instruct",
     "meta-llama/llama-4-maverick-17b-128e-instruct",
 }
-
-# Models that exist on Groq but are not chat-completion models (audio, TTS,
-# moderation, embeddings-adjacent) - filtered out of the chat model picker.
 NON_CHAT_MODEL_PREFIXES = (
-    "whisper",
-    "canopylabs",
-    "distil-whisper",
-    "playai-tts",
+    "whisper", "canopylabs", "distil-whisper", "playai", "meta-llama/llama-guard",
+    "meta-llama/llama-prompt-guard", "openai/safeguard", "openai/gpt-oss-safeguard", "prompt-guard",
 )
-
-RECOMMENDED_CHAT_MODELS = [
-    "deepseek-v4-flash",
-    "glm-5.3",
-    "gpt-5.6-sol",
-    "claude-opus-4-8",
-    "claude-opus-5",
-    "openai/gpt-oss-120b",
-    "openai/gpt-oss-20b",
-    "qwen/qwen3.6-27b",
-    "moonshotai/kimi-k2",
+GROQ_FALLBACK_MODELS = ["openai/gpt-oss-20b", "openai/gpt-oss-120b", "qwen/qwen3.8-27b"]
+NVIDIA_MODELS = [
+    ("openai/gpt-oss-20b", "GPT OSS 20B"),
+    ("nvidia/nemotron-3.5-lightning-30b-a3b", "Nemotron 3.5 Lightning"),
+    ("nvidia/nemotron-3-super-120b-a12b", "Nemotron 3 Super"),
+    ("nvidia/nemotron-3-ultra-550b-a55b", "Nemotron 3 Ultra"),
+    ("deepseek-ai/deepseek-v4.1-flash", "DeepSeek V4.1 Flash"),
+    ("moonshotai/kimi-k2.6", "Kimi K2.6"),
+    ("z-ai/glm-5.3", "GLM 5.3"),
+    ("z-ai/glm-5.3-flash", "GLM 5.3 Flash"),
+    ("nvidia/llama-3.1-nemotron-70b-instruct", "Nemotron 70B"),
 ]
