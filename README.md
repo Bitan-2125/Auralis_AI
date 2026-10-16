@@ -1,4 +1,4 @@
-# Auralis - Groq + NVIDIA NIM chat
+# AURALIS AI - Groq + NVIDIA NIM chat
 
 A React/FastAPI chat app with streaming replies, persistent conversation history, user-controlled memory, document retrieval and image generation. Your existing accounts and conversations are preserved; startup only creates the new tables.
 
