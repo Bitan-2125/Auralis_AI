@@ -70,6 +70,8 @@ class PipelineTests(unittest.TestCase):
                 Settings(_env_file=None, database_url='sqlite:///./chat.db', secret_key='x' * 40)
             with self.assertRaisesRegex(ValueError, 'random SECRET_KEY'):
                 Settings(_env_file=None, database_url='postgresql://localhost/test', secret_key='weak')
+            with self.assertRaisesRegex(ValueError, 'random SECRET_KEY'):
+                Settings(_env_file=None, database_url='postgresql://localhost/test', secret_key='super-secret-key-change-in-production-abc123xyz789')
             config = Settings(_env_file=None, database_url='postgresql://localhost/test', secret_key='x' * 40)
             self.assertTrue(config.database_url.startswith('postgresql://'))
 

@@ -34,7 +34,7 @@ class Settings(BaseSettings):
         if os.getenv("VERCEL") == "1":
             if not self.database_url.startswith(("postgres://", "postgresql://", "postgresql+psycopg://")):
                 raise ValueError("Vercel requires a persistent PostgreSQL DATABASE_URL")
-            if len(self.secret_key) < 32 or "change-me" in self.secret_key:
+            if len(self.secret_key) < 32 or any(marker in self.secret_key.lower() for marker in ("change-me", "change-in-production", "replace-with")):
                 raise ValueError("Set a random SECRET_KEY of at least 32 characters")
         return self
 
