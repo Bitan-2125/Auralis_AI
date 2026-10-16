@@ -188,6 +188,10 @@ def suite(client):
         assert sources and all(source["url"].startswith(("https://", "http://")) for source in sources)
         history = expect(api("GET", f"/chats/{web_chat}/messages")).json()
         assert any(source["kind"] == "web" for source in history[-1]["sources"])
+        nvidia_chat = chat("nvidia::openai/gpt-oss-20b")
+        _, nvidia_events = send(nvidia_chat, "Find recent official NVIDIA NIM announcements and cite your sources. Answer in under 80 words.", web_search="auto")
+        assert any(event.get("status") == "searching" for event in nvidia_events), "NVIDIA-selected chat did not search"
+        assert any(source.get("kind") == "web" for source in nvidia_events[-1]["sources"])
     record("automatic search selects fresh lookups, skips arithmetic and saves web sources", automatic_search)
 
     def image_generation():

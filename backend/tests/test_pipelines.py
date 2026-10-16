@@ -309,6 +309,19 @@ class PipelineTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'invalid search request'):
                 asyncio.run(web_search.plan_search('groq::openai/gpt-oss-20b', 'Hello', []))
 
+    def test_search_decision_provider_fallback_and_explicit_override(self):
+        tool = {'function': {'name': 'tavily_search', 'arguments': '{"query":"NVIDIA announcements","topic":"news"}'}}
+        planner = AsyncMock(side_effect=[RuntimeError('The search decision timed out.'), {'tool_calls': [tool]}])
+        with patch.object(providers, 'complete_chat', planner):
+            requests = asyncio.run(web_search.plan_search('nvidia::openai/gpt-oss-20b', 'Find recent NVIDIA announcements', []))
+        self.assertEqual(len(requests), 1)
+        self.assertEqual([call.args[0] for call in planner.await_args_list], ['nvidia::openai/gpt-oss-20b', 'groq::openai/gpt-oss-20b'])
+        planner = AsyncMock(side_effect=RuntimeError('The search decision timed out.'))
+        with patch.object(settings, 'web_search_router_model', 'nvidia::openai/gpt-oss-20b'), patch.object(providers, 'complete_chat', planner):
+            with self.assertRaisesRegex(RuntimeError, 'timed out'):
+                asyncio.run(web_search.plan_search('nvidia::openai/gpt-oss-20b', 'Find recent NVIDIA announcements', []))
+        planner.assert_awaited_once()
+
     def test_tavily_transport_bounds_results_sanitizes_errors_and_urls(self):
         import httpx
         real_client = httpx.AsyncClient

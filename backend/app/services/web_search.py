@@ -98,10 +98,21 @@ async def plan_search(answer_model, user_text, history, has_documents=False):
     # The planner sees only recent conversational text, not stored memory/documents/images.
     recent = [{"role": row.role, "text": redact_secrets(row.content[:1000])}
               for row in history[-6:] if row.role in {"user", "assistant"}]
-    message = await providers.complete_chat(router_model(answer_model), [
+    decision_messages = [
         {"role": "system", "content": system},
         {"role": "user", "content": json.dumps({"recent_conversation": recent, "latest_request": redact_secrets(user_text)}, ensure_ascii=False)},
-    ], tools=[SEARCH_TOOL])
+    ]
+    primary = router_model(answer_model)
+    try:
+        message = await providers.complete_chat(primary, decision_messages, tools=[SEARCH_TOOL])
+    except RuntimeError:
+        # Retry only the default planner on the other configured provider. The
+        # answer model is unchanged, and both calls fit the generation deadline.
+        fallback = ("groq::openai/gpt-oss-20b" if primary.startswith("nvidia::") and settings.groq_api_key
+                    else "nvidia::openai/gpt-oss-20b" if primary.startswith("groq::") and settings.nvidia_api_key else None)
+        if settings.web_search_router_model or not fallback:
+            raise
+        message = await providers.complete_chat(fallback, decision_messages, tools=[SEARCH_TOOL])
     calls = message.get("tool_calls") or []
     if not isinstance(calls, list):
         raise RuntimeError("The search model returned invalid tool calls.")
