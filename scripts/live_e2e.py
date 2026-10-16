@@ -149,8 +149,9 @@ def suite(client):
             data = expect(api("POST", f"/chats/{doc_chat}/documents", files={"file": (filename, data, mime)})).json()
             assert data["chunk_count"] > 0
             doc_ids.append(data["id"])
-        text, events = send(doc_chat, "According to the Cedar documents, what is the approved budget and who is its owner? Answer briefly.")
+        text, events = send(doc_chat, "According to the Cedar documents, what is the approved budget and who is its owner? Answer briefly.", web_search="auto")
         assert "41414" in text.replace(",", "") and "mira" in text.casefold()
+        assert not any(event.get("status") == "searching" for event in events), "Document-only question triggered public web search"
         assert events[-1]["sources"]
         history = expect(api("GET", f"/chats/{doc_chat}/messages")).json()
         assert history[-1]["sources"], "Citations were not persisted"

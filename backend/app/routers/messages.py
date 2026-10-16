@@ -43,7 +43,7 @@ async def send_message(chat_id: str, payload: schemas.MessageCreate, db: Session
         # Copy needed ORM attributes before the request session closes for streaming.
         history = [models.Message(role=row.role, content=row.content) for row in history]
         memories = [models.Memory(content=row.content) for row in memories]
-        has_documents = bool(chat.use_rag if payload.use_rag is None else payload.use_rag)
+        has_documents = bool(sources)
         document_sources = sources
         api_messages, history_count, sources, memory_count = context_service.build_messages(history, payload.content, memories, document_sources, payload.image_url)
         safe_sources = [{k: v for k, v in source.items() if k != "text"} for source in sources]
